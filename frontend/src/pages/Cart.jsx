@@ -1,0 +1,21 @@
+import React, { useEffect, useState } from "react";
+import { ArrowRight, MapPin, Minus, Plus, ShoppingBag, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { cartApi, orderApi } from "../api";
+import { useAuth } from "../auth";
+import { EmptyState, ErrorBox, Modal, PageHeader, Quantity, Spinner, SuccessToast } from "../components/UI";
+
+export default function Cart(){
+ const {user}=useAuth();const nav=useNavigate();const [cart,setCart]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(""),[address,setAddress]=useState(""),[checkout,setCheckout]=useState(false),[busy,setBusy]=useState(false),[toast,setToast]=useState("");
+ const load=async()=>{try{setLoading(true);const {data}=await cartApi.get(user.email);setCart(data)}catch(e){setError(e.response?.data?.message||"Could not load cart.")}finally{setLoading(false)}};useEffect(()=>{load()},[user.email]);
+ const update=async(id,q)=>{try{const {data}=await cartApi.update(id,q,user.email);setCart(data)}catch(e){setToast(e.response?.data?.message||"Could not update quantity.")}};
+ const remove=async(id)=>{try{const {data}=await cartApi.remove(id,user.email);setCart(data)}catch(e){setToast(e.response?.data?.message||"Could not remove item.")}};
+ const place=async()=>{if(!address.trim())return;setBusy(true);try{await orderApi.place(address,user.email);setCheckout(false);setAddress("");setToast("Order placed successfully");await load();setTimeout(()=>nav("/orders"),500)}catch(e){setToast(e.response?.data?.message||"Could not place order.")}finally{setBusy(false)}};
+ if(loading)return <div className="loading-row tall"><Spinner/> Loading cart...</div>;
+ const items=cart?.items||[];
+ return <><PageHeader eyebrow="YOUR CART" title="Ready to restock?" description={`${items.length} product${items.length===1?"":"s"} in your current order.`}/>{error&&<ErrorBox message={error}/>}
+ {!items.length?<EmptyState title="Your cart is empty" text="Browse the medicine catalog and add products you need for your next restock." action={<button className="btn primary" onClick={()=>nav("/medicines")}>Browse medicines <ArrowRight size={16}/></button>}/>:<div className="cart-layout"><div className="cart-items panel">{items.map(item=><div className="cart-row" key={item.id}><div className="cart-product"><div className="mini-product"><ShoppingBag size={18}/></div><div><b>{item.medicineName}</b><span>₹{Number(item.price||0).toLocaleString("en-IN")} / unit</span></div></div><Quantity value={item.quantity} onChange={q=>update(item.medicineId,q)}/><strong>₹{Number(item.subtotal||0).toLocaleString("en-IN")}</strong><button className="delete-btn" onClick={()=>remove(item.medicineId)}><Trash2 size={17}/></button></div>)}<div className="cart-clear"><button onClick={async()=>{await cartApi.clear(user.email);load()}}>Clear cart</button></div></div><aside className="summary panel"><h3>Order summary</h3><div className="summary-line"><span>Subtotal</span><b>₹{Number(cart?.totalAmount||0).toLocaleString("en-IN")}</b></div><div className="summary-line muted"><span>Delivery</span><span>Confirmed by seller</span></div><div className="summary-total"><span>Total</span><b>₹{Number(cart?.totalAmount||0).toLocaleString("en-IN")}</b></div><button className="btn primary full" onClick={()=>setCheckout(true)}>Continue to checkout <ArrowRight size={16}/></button><p className="summary-safe"><MapPin size={14}/> Delivery address is shared with the seller for fulfilment.</p></aside></div>}
+ <Modal open={checkout} title="Confirm delivery details" onClose={()=>setCheckout(false)} footer={<><button className="btn ghost" onClick={()=>setCheckout(false)}>Back</button><button className="btn primary" disabled={busy||!address.trim()} onClick={place}>{busy?<Spinner/>:"Place order"}</button></>}>
+ <label>Delivery address<textarea className="plain-input textarea" rows="4" value={address} onChange={e=>setAddress(e.target.value)} placeholder={user.address||"Shop name, village, district, state"}/></label><div className="checkout-total">Order total <b>₹{Number(cart?.totalAmount||0).toLocaleString("en-IN")}</b></div>
+ </Modal><SuccessToast text={toast} onClose={()=>setToast("")}/></>;
+}
